@@ -60,6 +60,7 @@ export default function CivicDashboard() {
   const [account, setAccount] = useState<CivicAccount | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -72,6 +73,7 @@ export default function CivicDashboard() {
   const [similarityResults, setSimilarityResults] = useState<Incident[] | null>(null);
   const [searching, setSearching] = useState(false);
   const sessionExpired = useRef(false);
+  const submissionInProgress = useRef(false);
 
   async function handleLogout() {
     try {
@@ -219,6 +221,8 @@ export default function CivicDashboard() {
     event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
+    if (submissionInProgress.current) return;
+    submissionInProgress.current = true;
     setSubmitting(true);
     setMessage("");
 
@@ -260,6 +264,7 @@ export default function CivicDashboard() {
           : "Something went wrong."
       );
     } finally {
+      submissionInProgress.current = false;
       setSubmitting(false);
     }
   }
@@ -339,7 +344,8 @@ export default function CivicDashboard() {
     return (
       matchesSearch &&
       (statusFilter === "all" ||
-        incident.status === statusFilter)
+        incident.status === statusFilter) &&
+      (priorityFilter === "all" || incident.priority === priorityFilter)
     );
   });
 
@@ -711,17 +717,49 @@ export default function CivicDashboard() {
               <option value="pending">Pending</option>
               <option value="assigned">Assigned</option>
               <option value="in_progress">In progress</option>
+              <option value="resolved">Resolved</option>
               <option value="rejected">Rejected</option>
             </select>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              aria-label="Filter by priority"
+            >
+              <option value="all">All priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            {(search || statusFilter !== "all" || priorityFilter !== "all" || similarityResults) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                  setPriorityFilter("all");
+                  setSimilarityResults(null);
+                }}
+              >
+                Clear filters
+              </button>
+            )}
           </div>
 
           {loading ? (
             <p className="message">Loading incidents...</p>
           ) : error ? (
-            <p className="message error">{error}</p>
+            <div className="message error" role="alert">
+              <p>{error}</p>
+              <button type="button" onClick={() => void loadIncidents()}>
+                Try again
+              </button>
+            </div>
           ) : filteredIncidents.length === 0 ? (
             <p className="message">
-              No incidents match your search.
+              {incidents.length === 0
+                ? "You have not reported an incident yet. Select Report incident to submit your first local issue."
+                : "No incidents match these filters. Clear the search or filters to see your reports."}
             </p>
           ) : (
             <div className="table-scroll">
@@ -752,6 +790,12 @@ export default function CivicDashboard() {
                             "0"
                           )}
                         </div>
+                        <time className="incident-meta" dateTime={incident.created_at}>
+                          Reported {new Date(incident.created_at).toLocaleString("en-IN", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </time>
                       </td>
 
                       <td>{incident.category_name}</td>

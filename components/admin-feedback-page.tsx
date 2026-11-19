@@ -265,7 +265,7 @@ export default function AdminFeedbackPage() {
 
                   {item.comment ? (
                     <blockquote className="mt-3 rounded-lg bg-gray-50 p-3 text-sm italic text-gray-700 border-l-4 border-blue-500">
-                      "{item.comment}"
+                      &ldquo;{item.comment}&rdquo;
                     </blockquote>
                   ) : (
                     <p className="mt-3 text-xs italic text-gray-400">No comment provided.</p>

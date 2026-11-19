@@ -45,5 +45,10 @@ Run on a disposable development database with all migrations applied and `ON_ERR
 | query_plans.sql | EXPLAIN examples |
 | view_consistency.sql | Independent summary count comparison |
 | recursive_status_report.sql | Recursive CTE timeline |
+| priority_procedure.sql | Valid and invalid priority updates inside a rolled-back transaction |
+| category_trends.sql | Daily incident counts grouped by category |
+| backlog_age.sql | Age of open incidents |
+| officer_workload.sql | Open workload per officer, including officers with zero assignments |
+| feedback_statistics.sql | Feedback counts and averages with NULL for no ratings |
 
 See also [vector lifecycle](../../docs/vector-lifecycle.md), [backup and restore](../../docs/database-backup.md), and [authorization boundaries](../../docs/database-access-model.md). These are checks to execute, not claimed passing test results.

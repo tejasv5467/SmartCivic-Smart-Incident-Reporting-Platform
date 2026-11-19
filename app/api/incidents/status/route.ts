@@ -2,14 +2,7 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
 import { authenticateRequest } from "@/lib/auth/authenticate";
-
-const allowedStatuses = [
-  "pending",
-  "assigned",
-  "in_progress",
-  "resolved",
-  "rejected",
-];
+import { INCIDENT_STATUSES, isAllowedOfficerStatusTransition } from "@/lib/incident-status";
 
 export async function PATCH(
   request: Request
@@ -35,7 +28,7 @@ export async function PATCH(
     const newStatus =
       typeof body.status === "string" ? body.status : "";
 
-    if (!allowedStatuses.includes(newStatus)) {
+    if (!INCIDENT_STATUSES.includes(newStatus as (typeof INCIDENT_STATUSES)[number])) {
       return NextResponse.json(
         { success: false, message: "Invalid incident status." },
         { status: 400 }
@@ -122,6 +115,20 @@ export async function PATCH(
         message: "The incident already has this status.",
         status: oldStatus,
       });
+    }
+
+    if (
+      auth.role === "officer" &&
+      !isAllowedOfficerStatusTransition(oldStatus, newStatus)
+    ) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Officers can move assigned incidents to in progress, then to resolved.",
+        },
+        { status: 409 }
+      );
     }
 
     await client.query(

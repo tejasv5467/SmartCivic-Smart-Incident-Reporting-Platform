@@ -43,11 +43,29 @@ export async function syncIncidentVector(incident: IncidentVectorSource) {
 export async function syncMissingIncidentVectors(
   incidents: IncidentVectorSource[]
 ) {
-  const indexedIds = await getIndexedIncidentIds(
-    incidents.map((incident) => Number(incident.incident_id))
+  if (incidents.length === 0) return;
+
+  const incidentIds = incidents.map((incident) => Number(incident.incident_id));
+  const [indexedIds, syncStatus] = await Promise.all([
+    getIndexedIncidentIds(incidentIds),
+    pool.query(
+      `SELECT incident_id
+       FROM incident_vector_sync
+       WHERE incident_id = ANY($1::bigint[])
+         AND (indexed_at IS NULL OR last_error IS NOT NULL)`,
+      [incidentIds]
+    ),
+  ]);
+  const retryIds = new Set(
+    syncStatus.rows.map((row: { incident_id: string | number }) =>
+      Number(row.incident_id)
+    )
   );
   const missing = incidents.filter(
-    (incident) => !indexedIds.has(Number(incident.incident_id))
+    (incident) => {
+      const incidentId = Number(incident.incident_id);
+      return !indexedIds.has(incidentId) || retryIds.has(incidentId);
+    }
   );
   if (missing.length === 0) return;
 
