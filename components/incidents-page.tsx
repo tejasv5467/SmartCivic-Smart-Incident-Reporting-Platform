@@ -26,7 +26,7 @@ type Incident = {
   status: string;
   is_assigned?: boolean;
   assigned_officers?: string[];
-  reported_by_name?: string;
+  reported_by?: string;
   created_at?: string;
 };
 
@@ -35,10 +35,15 @@ export default function IncidentsClientPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [officerIds, setOfficerIds] = useState<string[]>([]);
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [selectedIncident, setSelectedIncident] = useState("");
   const [assignMessage, setAssignMessage] = useState("");
+  const [assignError, setAssignError] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [updatingIncidentId, setUpdatingIncidentId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -66,6 +71,7 @@ export default function IncidentsClientPage() {
 
   async function assignOfficer() {
     if (!selectedIncident || officerIds.length === 0) {
+      setAssignError(true);
       setAssignMessage("Select a pending incident and at least one officer.");
       return;
     }
@@ -75,6 +81,8 @@ export default function IncidentsClientPage() {
     );
 
     try {
+      setAssigning(true);
+      setAssignError(false);
       setAssignMessage("Assigning officer...");
 
       const response = await fetch("/api/assignments", {
@@ -124,14 +132,23 @@ export default function IncidentsClientPage() {
         setIncidents(refreshedData.incidents);
       }
     } catch (err) {
+      setAssignError(true);
+      const details = err instanceof Error ? err.message : "";
       setAssignMessage(
-        err instanceof Error ? err.message : "Assignment failed."
+        details === "Failed to fetch"
+          ? "Could not contact the server. Check your connection and try again."
+          : details
+            ? `Assignment failed: ${details}`
+            : "Assignment failed. Check your connection and try again."
       );
+    } finally {
+      setAssigning(false);
     }
   }
 
   async function updateIncidentStatus(incidentId: number, status: string) {
     setUpdatingIncidentId(incidentId);
+    setAssignError(false);
     setAssignMessage("");
 
     try {
@@ -167,6 +184,7 @@ export default function IncidentsClientPage() {
 
       setAssignMessage(`Incident #${incidentId} marked ${status.replace("_", " ")}.`);
     } catch (err) {
+      setAssignError(true);
       setAssignMessage(
         err instanceof Error ? err.message : "Unable to update incident status."
       );
@@ -215,6 +233,41 @@ export default function IncidentsClientPage() {
     };
   }, [router]);
 
+  async function retryPortalData() {
+    setLoading(true);
+    setError("");
+    try {
+      const [incidentsResponse, officersResponse] = await Promise.all([
+        fetch("/api/incidents", { cache: "no-store" }),
+        fetch("/api/officers", { cache: "no-store" }),
+      ]);
+      if (incidentsResponse.status === 401 || officersResponse.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      const [incidentsData, officersData] = await Promise.all([
+        incidentsResponse.json(),
+        officersResponse.json(),
+      ]);
+      if (!incidentsResponse.ok || !incidentsData.success) {
+        throw new Error(incidentsData.message || "Failed to load incidents.");
+      }
+      if (!officersResponse.ok || !officersData.success) {
+        throw new Error(officersData.message || "Failed to load officers.");
+      }
+      setIncidents(incidentsData.incidents);
+      setOfficers(officersData.officers);
+    } catch (retryError) {
+      setError(
+        retryError instanceof Error
+          ? retryError.message
+          : "Unable to reload the admin portal."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // Strictly filter only pending AND unassigned incidents.
   // Assigned, in_progress, resolved, and rejected incidents are excluded from assignment choice.
   const pendingIncidents = incidents.filter(
@@ -235,6 +288,26 @@ export default function IncidentsClientPage() {
             String(selectedIncidentRecord.department_id)
       )
     : [];
+
+  const filteredIncidents = incidents.filter((incident) => {
+    const query = searchFilter.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      [
+        incident.title,
+        incident.location,
+        incident.category_name,
+        incident.department_name,
+        incident.reported_by,
+        ...(incident.assigned_officers ?? []),
+        String(incident.incident_id),
+      ].some((value) => value?.toLowerCase().includes(query));
+    return (
+      matchesSearch &&
+      (statusFilter === "all" || incident.status === statusFilter) &&
+      (priorityFilter === "all" || incident.priority === priorityFilter)
+    );
+  });
 
   return (
     <main className="min-h-screen bg-gray-100 p-6 text-gray-900 md:p-10">
@@ -330,17 +403,24 @@ export default function IncidentsClientPage() {
               <button
                 onClick={assignOfficer}
                 disabled={
-                  loading || !selectedIncidentRecord || !officerIds.length
+                  loading || assigning || !selectedIncidentRecord || !officerIds.length
                 }
                 className="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
               >
-                Assign selected officers ({officerIds.length})
+                {assigning ? "Assigning..." : `Assign selected officers (${officerIds.length})`}
               </button>
             </div>
           </div>
 
           {assignMessage && (
-            <p className="mt-4 text-sm font-medium text-blue-700 bg-blue-50 p-2.5 rounded-lg border border-blue-200" role="status">
+            <p
+              className={`mt-4 rounded-lg border p-2.5 text-sm font-medium ${
+                assignError
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-blue-200 bg-blue-50 text-blue-700"
+              }`}
+              role={assignError ? "alert" : "status"}
+            >
               {assignMessage}
             </p>
           )}
@@ -362,14 +442,76 @@ export default function IncidentsClientPage() {
         {loading ? (
           <p>Loading incidents...</p>
         ) : error ? (
-          <p className="rounded-lg bg-red-50 p-4 text-red-700">
-            Error: {error}
-          </p>
+          <div className="rounded-lg bg-red-50 p-4 text-red-700" role="alert">
+            <p>Error: {error}</p>
+            <button
+              type="button"
+              className="mt-2 rounded border border-red-300 px-3 py-1"
+              onClick={() => void retryPortalData()}
+            >
+              Try again
+            </button>
+          </div>
         ) : incidents.length === 0 ? (
           <p className="rounded-lg bg-white p-6 text-gray-600">
             No active incidents found.
           </p>
         ) : (
+          <>
+          <section className="mb-4 flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm sm:flex-row">
+            <label className="sr-only" htmlFor="admin-incident-search">Search active incidents</label>
+            <input
+              id="admin-incident-search"
+              type="search"
+              value={searchFilter}
+              onChange={(event) => setSearchFilter(event.target.value)}
+              placeholder="Search title, category, location, officer..."
+              className="min-w-0 flex-1 rounded-lg border px-3 py-2"
+            />
+            <label className="sr-only" htmlFor="admin-incident-status">Filter by status</label>
+            <select
+              id="admin-incident-status"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="rounded-lg border bg-white px-3 py-2"
+            >
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In progress</option>
+            </select>
+            <label className="sr-only" htmlFor="admin-incident-priority">Filter by priority</label>
+            <select
+              id="admin-incident-priority"
+              value={priorityFilter}
+              onChange={(event) => setPriorityFilter(event.target.value)}
+              className="rounded-lg border bg-white px-3 py-2"
+            >
+              <option value="all">All priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            {(searchFilter || statusFilter !== "all" || priorityFilter !== "all") && (
+              <button
+                type="button"
+                className="rounded-lg border px-3 py-2 text-sm"
+                onClick={() => {
+                  setSearchFilter("");
+                  setStatusFilter("all");
+                  setPriorityFilter("all");
+                }}
+              >
+                Reset filters
+              </button>
+            )}
+          </section>
+          {filteredIncidents.length === 0 ? (
+            <p className="rounded-lg bg-white p-6 text-gray-600" role="status">
+              No active incidents match these filters. Reset the filters to see the full queue.
+            </p>
+          ) : (
           <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
             <table className="incident-data-table w-full text-left text-sm">
               <thead className="bg-gray-50 text-gray-600">
@@ -386,7 +528,7 @@ export default function IncidentsClientPage() {
                 </tr>
               </thead>
               <tbody>
-                {incidents.map((incident) => (
+                {filteredIncidents.map((incident) => (
                   <tr
                     key={incident.incident_id}
                     className="border-t hover:bg-gray-50"
@@ -446,6 +588,8 @@ export default function IncidentsClientPage() {
               </tbody>
             </table>
           </div>
+          )}
+          </>
         )}
       </div>
     </main>

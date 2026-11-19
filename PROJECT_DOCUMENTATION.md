@@ -59,7 +59,7 @@ Department users can:
 
 - view their assigned incidents
 - search similar incidents in the incidents they are authorized to view using Qdrant
-- update statuses such as assigned, in_progress, resolved, and rejected
+- move assigned work through `in_progress` to `resolved`; administrators handle rejection and status corrections
 - work within the department-specific operational view
 - review complaints and feedback for incidents assigned to them
 
@@ -146,7 +146,7 @@ The typical incident lifecycle follows this flow:
 1. A resident submits an incident with category, urgency, location, and description.
 2. The admin review stream evaluates the report.
 3. The report can be assigned to a department officer.
-4. The officer updates the case status as work proceeds.
+4. The officer advances assigned work from `assigned` to `in_progress`, then to `resolved`. Administrators may reject a report or correct its status.
 5. Status changes are recorded in `status_history` for traceability.
 6. A citizen may give feedback once the incident is resolved.
 7. A citizen may complain about an unresolved incident. Repeat complaints are limited to once per 24 hours unless the incident status regresses, which permits an immediate complaint.

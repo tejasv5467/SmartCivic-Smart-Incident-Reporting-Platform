@@ -111,6 +111,7 @@ psql "$DATABASE_URL" -f db/migrations/006_feedback.sql
 psql "$DATABASE_URL" -f db/migrations/007_notifications.sql
 psql "$DATABASE_URL" -f db/migrations/008_backfill_feedback_notifications.sql
 psql "$DATABASE_URL" -f db/migrations/009_complaints.sql
+psql "$DATABASE_URL" -f db/migrations/010_priority_procedure.sql
 ~~~
 
 Run each migration once, in sequence, against the intended database. The migration files define the schema changes and supporting data required by the application.
@@ -185,8 +186,19 @@ npm run build
 
 These commands run ESLint and create a Next.js production build. They do not replace testing the database connection, migrations, authentication, role permissions, or Qdrant integration in the target environment.
 
+The unit check uses Node's built-in test runner and TypeScript type stripping. Use Node.js 22.6 or newer for `npm test`:
+
+~~~bash
+npm test
+~~~
+
+For a fresh-schema rehearsal, create a uniquely named empty disposable database and apply all ten migrations in order before running the scripts in `db/checks/`. Do not point these write demonstrations at a production database.
+
 ## Documentation
 
 - [Project documentation](./PROJECT_DOCUMENTATION.md) — architecture, data model, workflows, security notes, and implementation details.
+- [API reference](./docs/api-reference.md) — routes, access rules, and request/response examples.
+- [Schema reference](./docs/schema-reference.md) — relationships and integrity constraints based on the migrations.
 - [Database migrations](./db/migrations/) — ordered SQL schema and feature migrations.
+- [Database checks](./db/checks/README.md) — read-only diagnostics and rollback-safe verification scripts.
 - [Docker Compose configuration](./docker-compose.yml) — local Qdrant service configuration.

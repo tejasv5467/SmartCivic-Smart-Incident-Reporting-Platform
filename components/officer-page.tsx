@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import NotificationsPanel from "@/components/notifications-panel";
 import IncidentSearch from "@/components/incident-search";
+import { getOfficerStatusOptions } from "@/lib/incident-status";
 
 type Incident = {
   incident_id: number;
@@ -24,13 +25,12 @@ type OfficerAccount = {
   is_manager: boolean;
 };
 
-const statuses = ["pending", "assigned", "in_progress", "resolved"];
-
 export default function OfficerClientPage() {
   const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [account, setAccount] = useState<OfficerAccount | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -160,9 +160,31 @@ export default function OfficerClientPage() {
         <IncidentSearch />
 
         {error && (
-          <p className="mb-5 rounded-lg bg-red-50 p-4 text-red-700" role="alert">
-            {error}
-          </p>
+          <div className="mb-5 rounded-lg bg-red-50 p-4 text-red-700" role="alert">
+            <p>{error}</p>
+            <button
+              type="button"
+              className="mt-2 rounded border border-red-300 px-3 py-1"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                setError("");
+                try {
+                  await loadPortal();
+                } catch (retryError) {
+                  setError(
+                    retryError instanceof Error
+                      ? retryError.message
+                      : "Unable to load the officer portal."
+                  );
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+            >
+              {retrying ? "Retrying..." : "Try again"}
+            </button>
+          </div>
         )}
         {notice && (
           <p className="mb-5 rounded-lg bg-green-50 p-4 text-green-800" role="status">
@@ -220,7 +242,7 @@ export default function OfficerClientPage() {
                           void updateStatus(incident.incident_id, event.target.value)
                         }
                       >
-                        {statuses.map((status) => (
+                        {getOfficerStatusOptions(incident.status).map((status) => (
                           <option key={status} value={status}>
                             {status.replace("_", " ")}
                           </option>

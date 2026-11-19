@@ -120,7 +120,6 @@ export async function GET(request: Request) {
            JOIN departments d ON c.department_id = d.department_id
            JOIN users u ON i.reported_by = u.user_id
            WHERE u.auth_account_id = $2
-             AND i.status NOT IN ('resolved', 'rejected')
              AND ${searchFilter}
            ORDER BY i.created_at DESC`,
           [searchTerm, auth.userId]
